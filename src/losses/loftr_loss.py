@@ -26,7 +26,7 @@ class LoFTRLoss(nn.Module):
             conf_gt (torch.Tensor): (N, HW0, HW1)
             weight (torch.Tensor): (N, HW0, HW1)
         """
-        pos_mask, neg_mask = conf_gt == 1, conf_gt == 0
+        pos_mask, neg_mask = conf_gt == 1, conf_gt == 0    #get mask for positive match and negative match
         c_pos_w, c_neg_w = self.c_pos_w, self.c_neg_w
         # corner case: no gt coarse-level match at all
         if not pos_mask.any():  # assign a wrong gt
@@ -46,7 +46,7 @@ class LoFTRLoss(nn.Module):
             loss_pos = - torch.log(conf[pos_mask])
             loss_neg = - torch.log(1 - conf[neg_mask])
             if weight is not None:
-                loss_pos = loss_pos * weight[pos_mask]
+                loss_pos = loss_pos * weight[pos_mask]      #this is how you define binary cross entropy
                 loss_neg = loss_neg * weight[neg_mask]
             return c_pos_w * loss_pos.mean() + c_neg_w * loss_neg.mean()
         elif self.loss_config['coarse_type'] == 'focal':
@@ -103,13 +103,13 @@ class LoFTRLoss(nn.Module):
         else:
             raise NotImplementedError()
 
-    def _compute_fine_loss_l2(self, expec_f, expec_f_gt):
+    def _compute_fine_loss_l2(self, expec_f, expec_f_gt):    #expec_f is the only the j term
         """
         Args:
             expec_f (torch.Tensor): [M, 2] <x, y>
             expec_f_gt (torch.Tensor): [M, 2] <x, y>
         """
-        correct_mask = torch.linalg.norm(expec_f_gt, ord=float('inf'), dim=1) < self.correct_thr
+        correct_mask = torch.linalg.norm(expec_f_gt, ord=float('inf'), dim=1) < self.correct_thr    #torch.linalg.norm is to find max element for each row(max in either or y), if max is greater than threshould, it is out of GT window, abandon it
         if correct_mask.sum() == 0:
             if self.training:  # this seldomly happen when training, since we pad prediction with gt
                 logger.warning("assign a false supervision to avoid ddp deadlock")
