@@ -20,7 +20,7 @@ Want to run LoFTR with custom image pairs without configuring your own GPU envir
 ## Installation
 ```shell
 # For full pytorch-lightning trainer features (recommended)
-conda env create -f environment.yaml
+conda env create -f environment.yml
 conda activate loftr
 
 # For the LoFTR matcher only
