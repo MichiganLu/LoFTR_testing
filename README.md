@@ -50,7 +50,9 @@ If you want to run LoFTR-OT, some extra steps are needed:
 ## Run LoFTR demos
 
 ###Run on EuRoc
-First create an output folder under the LoFTR root directory. Then you can run the following command:
+
+Firstly you need to download the weights from [here](https://drive.google.com/drive/folders/1DOcOPZb3-5cWxLqn256AhwUVjBPifhuf?usp=sharing) and place the weights in such directory arrangement: LoFTR/weights.
+Secondly create an output folder under the LoFTR root directory. Then you can run the following command:
 ```
 python run_customized.py --model indoor --images /home/your_EuRoc_imageset_directory/ --gtcsv /home/your_gt_dataset_directory/data.csv --match_threshold 0.3
 ```
