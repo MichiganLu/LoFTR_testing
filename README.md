@@ -8,16 +8,11 @@
 
 ![demo_vid](assets/loftr-github-demo.gif)
 
-## TODO List and ETA
-- [x] Inference code and pretrained models (DS and OT) (2021-4-7)
-- [x] Code for reproducing the test-set results (2021-4-7)
-- [x] Webcam demo to reproduce the result shown in the GIF above (2021-4-13)
-- [x] Training code and training data preparation (expected 2021-6-10)
-
-The entire codebase for data pre-processing, training and validation is under major refactoring and will be released around June.
-Please subscribe to [this discussion thread](https://github.com/zju3dv/LoFTR/discussions/2) if you wish to be notified of the code release.
-In the meanwhile, discussions about the paper are welcomed in the [discussion panel](https://github.com/zju3dv/LoFTR/discussions).
-
+## Foreword
+It is such a brilliant idea to blend the CNN and transformer together for feature matching work. I have to give all the credits to the authors above.
+What I am specifically doing in this repo is trying to use the LoFTR and test it on the EuRoc dataset and compare to
+the ground truth for performance checking. This is truly one of the most powerful feature matching networks!
+If you would like to run it on EuROC dataset, look at "Run on EuRoc" directly after installing the environment.
 ## Colab demo
 Want to run LoFTR with custom image pairs without configuring your own GPU environment? Try the Colab demo:
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1BgNIOjFHauFoNB95LGesHBIjioX74USW?usp=sharing)
@@ -54,6 +49,13 @@ If you want to run LoFTR-OT, some extra steps are needed:
 
 ## Run LoFTR demos
 
+###Run on EuRoc
+First create an output folder under the LoFTR root directory. Then you can run the following command:
+```
+python run_customized.py --model indoor --images /home/your_EuRoc_imageset_directory/ --gtcsv /home/your_gt_dataset_directory/data.csv --match_threshold 0.3
+```
+For the images directory, do not forget to add the forward slash at the end of the directory. The model argument can either be
+indoor or outdoor. The output matching images and evaluation.csv can be found at the output directory upon completion of execution.
 ### Match image pairs with LoFTR
 
 <details>

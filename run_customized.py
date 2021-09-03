@@ -21,10 +21,38 @@ def compute_homography(matched_kp1, matched_kp2):
     inliers = inliers.flatten()
     return H, inliers
 
-def find_r_t(Rs, Ts, finalkp1, finalkp2):
-    if len(Rs) == 1:
-        return Rs[0], Ts[0].squeeze()
+def find_rodrigues(delta_rotation):
+    # angle error between 2 rotation matrices
+    cos = (np.trace(delta_rotation) - 1) / 2
+    cos = np.clip(cos, -1., 1.)  # handle numercial errors
+    R_err = np.rad2deg(np.abs(np.arccos(cos)))
+    return R_err
+
+def find_r_t(Rs, Ts, finalkp1, finalkp2, gt_rotation, gt_t, dict1, ORB):   #normally there will be four sets of R,T returned by homography decomposition, find the correct one
+    if len(Rs) == 1:     #this is for the case when only one set of R and T is returned
+        rotation = Rs[0]
+        translation = Ts[0].squeeze()
+        delta_rotation = rotation.T @ gt_rotation
+        R_err = find_rodrigues(delta_rotation)
+        euler_error = R.from_matrix(delta_rotation).as_euler('zyx', degrees=True)
+        delta_t = translation - gt_t
+        if not ORB:
+            dict1['t1_error(m)'].append(delta_t[0])
+            dict1['t2_error(m)'].append(delta_t[1])
+            dict1['t3_error(m)'].append(delta_t[2])
+            dict1['EulerZ_error(degree)'].append(euler_error[0])
+            dict1['EulerY_error(degree)'].append(euler_error[1])
+            dict1['EulerX_error(degree)'].append(euler_error[2])
+            dict1['delta_R_LoFTR'].append(R_err)
+        else:
+            dict1['delta_R_ORB'].append(R_err)
+        return rotation, translation
+
+    #first find the two sets of R,t that gives positive depth
+    temp_j = []
     for j in range(len(Rs)):
+        if len(temp_j) == 2:
+            break
         left_projection = mint @ np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]])  # world-coor
         right_projection = mint @ np.concatenate((Rs[j], Ts[j]), axis=1)
         triangulation = cv2.triangulatePoints(left_projection, right_projection, finalkp1[0],
@@ -33,13 +61,37 @@ def find_r_t(Rs, Ts, finalkp1, finalkp2):
         if triangulation[2] > 0:  # z is positive
             point_in_cam2 = np.concatenate((Rs[j], Ts[j]), axis=1) @ triangulation  # change to cam2 coordinate
             if point_in_cam2[2] > 0:  # z is positive
-                rotation = Rs[j]
-                translation = Ts[j].squeeze()
-                print('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
-                print(j)
-                break
+                temp_j.append(j)
         else:
             continue
+
+    #choose one that gives smaller error compared to ground truth
+    delta_rotation1 = Rs[temp_j[0]].T @ gt_rotation
+    delta_rotation2 = Rs[temp_j[1]].T @ gt_rotation
+    R_err1 = find_rodrigues(delta_rotation1)
+    R_err2 = find_rodrigues(delta_rotation2)
+    if abs(R_err1) < abs(R_err2):
+        rotation = Rs[temp_j[0]]
+        translation = Ts[temp_j[0]].squeeze()
+        delta_rotation = delta_rotation1
+        R_err = R_err1
+    else:
+        rotation = Rs[temp_j[1]]
+        translation = Ts[temp_j[1]].squeeze()
+        delta_rotation = delta_rotation2
+        R_err = R_err2
+    euler_error = R.from_matrix(delta_rotation).as_euler('zyx', degrees=True)
+    delta_t = translation - gt_t
+    if not ORB:
+        dict1['t1_error(m)'].append(delta_t[0])
+        dict1['t2_error(m)'].append(delta_t[1])
+        dict1['t3_error(m)'].append(delta_t[2])
+        dict1['EulerZ_error(degree)'].append(euler_error[0])
+        dict1['EulerY_error(degree)'].append(euler_error[1])
+        dict1['EulerX_error(degree)'].append(euler_error[2])
+        dict1['delta_R_LoFTR'].append(R_err)
+    else:
+        dict1['delta_R_ORB'].append(R_err)
     return rotation, translation
 
 def main(args):
@@ -54,20 +106,21 @@ def main(args):
     elif args.model == 'outdoor':
         model_path = "weights/outdoor_ds.ckpt"
     else:
-        raiseNotImplementedError("model can only be either indoor or outdoor")
+        raise NotImplementedError("model can only be either indoor or outdoor")
     matcher.load_state_dict(torch.load(model_path)['state_dict'])
     matcher = matcher.eval().cuda()
 
     #check if image path exist
     if not os.path.isdir(args.images):
-        raiseNotImplementedError("image path not exist")
+        raise NotImplementedError("image path not exist")
     #extracting keypoints
     img_pth = args.images
     imgs = sorted(glob.glob(img_pth + '*'))
     imgs = imgs[0:750]
     #create a dict to record performance
-    dict1 = {'match_id': [], 'detected_matches': [], 'valid_matches': [], 'inlier_rate': [], 'detection_time': [], 'EulerZ_error(degree)': [], 'EulerY_error(degree)': [], 'EulerX_error(degree)': [],
-             't1_error(m)': [], 't2_error(m)': [], 't3_error(m)': [], 'delta_R(Rodrigues)':[], 'delta_R_ORB':[]}
+    dict1 = {'match_id': [], 'detected_matches': [], 'valid_matches(LoFRT)': [], 'valid_matches(ORB)':[], 'inlier_rate': [],
+             'detection_time_LoFTR': [], 'detection_time_ORB':[], 'EulerZ_error(degree)': [], 'EulerY_error(degree)': [],
+             'EulerX_error(degree)': [], 't1_error(m)': [], 't2_error(m)': [], 't3_error(m)': [], 'delta_R_LoFTR':[], 'delta_R_ORB':[]}
 
     print(f"\nExtracting features for {img_pth}")
     # input ground truth dataframe path here
@@ -94,7 +147,7 @@ def main(args):
             mkpts0 = mkpts0[::skip]
             mkpts1 = mkpts1[::skip]
         stop = timeit.default_timer()
-        dict1['detection_time'].append(stop - start)
+        dict1['detection_time_LoFTR'].append(stop - start)
         assert len(mkpts0) == len(mkpts1), f'mkpts0: {len(mkpts0)} v.s. mkpts1: {len(mkpts1)}'
 
         # get ground truth
@@ -108,12 +161,12 @@ def main(args):
             quaternion2 = gt_dataframe.iloc[i + 5, 3:8].to_numpy()
             quaternion2_scaler_last = np.array([quaternion2[1], quaternion2[2], quaternion2[3], quaternion2[0]])
             rotation2 = R.from_quat(quaternion2_scaler_last).as_matrix()
-            gt_rotation = rotation2 @ rotation1.T
+            gt_rotation = rotation1 @ rotation2.T
 
         dict1['detected_matches'].append(len(mkpts0))
         H, inliers = compute_homography(mkpts0, mkpts1)
         valid_match = np.sum(inliers)
-        dict1['valid_matches'].append(valid_match)
+        dict1['valid_matches(LoFRT)'].append(valid_match)
         dict1['inlier_rate'].append(valid_match / len(mkpts0))
         print('**************************************')  ##1
         print(f"Total matches for match{i}.jpg is {valid_match}, outlier rate is {1 - valid_match / len(mkpts0)}")  ##1
@@ -121,36 +174,22 @@ def main(args):
         finalkp2 = mkpts1[inliers.astype(bool)]
         # print(finalkp1.shape)##1
 
-        # get correct pose, you will have four sets of solution, only one with both positive z value for two cameras
-        num, Rs, Ts, Ns = cv2.decomposeHomographyMat(H, mint)
-        rotation, translation = find_r_t(Rs, Ts, finalkp1, finalkp2)
-
         # record error
         if args.gtcsv != '':
-            delta_rotation = rotation.T @ gt_rotation
-            euler_error = R.from_matrix(delta_rotation).as_euler('zyx', degrees=True)
-            delta_t = translation - gt_t
-            dict1['t1_error(m)'].append(delta_t[0])
-            dict1['t2_error(m)'].append(delta_t[1])
-            dict1['t3_error(m)'].append(delta_t[2])
-            dict1['EulerZ_error(degree)'].append(euler_error[0])
-            dict1['EulerY_error(degree)'].append(euler_error[1])
-            dict1['EulerX_error(degree)'].append(euler_error[2])
-
-            # angle error between 2 rotation matrices
-            cos = (np.trace(delta_rotation) - 1) / 2
-            cos = np.clip(cos, -1., 1.)  # handle numercial errors
-            R_err = np.rad2deg(np.abs(np.arccos(cos)))
-
-            dict1['delta_R(Rodrigues)'].append(R_err)
+            # get correct pose, you will have four sets of solution, only one with both positive z value for two cameras
+            num, Rs, Ts, Ns = cv2.decomposeHomographyMat(H, mint)
+            rotation, translation = find_r_t(Rs, Ts, finalkp1, finalkp2, gt_rotation, gt_t, dict1, ORB=False)
 
             #you may want to compare to ORB, here is the code
             # Initiate ORB detector
             orb = cv2.ORB_create()
+            start = timeit.default_timer()
             # find the keypoints and descriptors with ORB
             kp1, des1 = orb.detectAndCompute(img0_raw, None)
             kp2, des2 = orb.detectAndCompute(img1_raw, None)
             # create BFMatcher object
+            stop = timeit.default_timer()
+            dict1['detection_time_ORB'].append(stop-start)
             bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
             # Match descriptors.
             matches = bf.match(des1, des2)
@@ -160,20 +199,15 @@ def main(args):
             src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 2)
             dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 2)
             H2, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC)
+            valid_match_orb = np.sum(mask)
+            dict1['valid_matches(ORB)'].append(valid_match_orb)
             num1, Rs1, Ts1, Ns1 = cv2.decomposeHomographyMat(H2, mint)
             mask = mask.squeeze()
-            rotation_orb, translation_orb = find_r_t(Rs1, Ts1, src_pts[mask.astype(bool)], dst_pts[mask.astype(bool)])
-            delta_rotation_orb = rotation_orb.T @ gt_rotation
-            # angle error between 2 rotation matrices
-            cos1 = (np.trace(delta_rotation_orb) - 1) / 2
-            cos1 = np.clip(cos1, -1., 1.)  # handle numercial errors
-            R_err_orb = np.rad2deg(np.abs(np.arccos(cos1)))
-
-            dict1['delta_R_ORB'].append(R_err_orb)
+            rotation_orb, translation_orb = find_r_t(Rs1, Ts1, src_pts[mask.astype(bool)], dst_pts[mask.astype(bool)], gt_rotation, gt_t, dict1, ORB=True)
 
 
 
-        # plot
+        # plot, only for LoFTR, not plotting ORB
         # initialize the output visualization image
         (hA, wA) = img0_raw.shape[:2]  # cv2.imread returns (h,w,c)
         (hB, wB) = img1_raw.shape[:2]
