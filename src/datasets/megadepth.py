@@ -107,7 +107,7 @@ class MegaDepthDataset(Dataset):
             'T_1to0': T_1to0,
             'K0': K_0,  # (3, 3)
             'K1': K_1,
-            'scale0': scale0,  # [scale_w, scale_h]
+            'scale0': scale0,  # [scale_w, scale_h], this is just one 2d vector. not the dimension
             'scale1': scale1,
             'dataset_name': 'MegaDepth',
             'scene_id': self.scene_id,

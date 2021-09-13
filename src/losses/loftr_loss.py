@@ -103,20 +103,22 @@ class LoFTRLoss(nn.Module):
         else:
             raise NotImplementedError()
 
-    def _compute_fine_loss_l2(self, expec_f, expec_f_gt):    #expec_f is the only the j term
+    def _compute_fine_loss_l2(self, expec_f, expec_f_gt):    #expec_f is
         """
         Args:
             expec_f (torch.Tensor): [M, 2] <x, y>
-            expec_f_gt (torch.Tensor): [M, 2] <x, y>
+            expec_f_gt (torch.Tensor): [M, 2] <x, y>                                                #remember, expec_f_gt is the
         """
-        correct_mask = torch.linalg.norm(expec_f_gt, ord=float('inf'), dim=1) < self.correct_thr    #torch.linalg.norm is to find max element for each row(max in either or y), if max is greater than threshould, it is out of GT window, abandon it
-        if correct_mask.sum() == 0:
+        correct_mask = torch.linalg.norm(expec_f_gt, ord=float('inf'), dim=1) < self.correct_thr    #correct_thr is 1. torch.linalg.norm is to first take absolute value of every number, then find the greater value in every (x,y)
+                                                                                                    #lets say you have torch.linalg.norm([[-4,3],[5,6]], ord=float('inf'), dim=1), it gives [4,6]
+                                                                                                    #in this step you are actually changing a numerical mask to boolean mask. For value smaller than threshold, it becomes false, true for value larger than threshold
+        if correct_mask.sum() == 0:                                                                 #if all predictions are false
             if self.training:  # this seldomly happen when training, since we pad prediction with gt
                 logger.warning("assign a false supervision to avoid ddp deadlock")
                 correct_mask[0] = True
             else:
                 return None
-        offset_l2 = ((expec_f_gt[correct_mask] - expec_f[correct_mask]) ** 2).sum(-1)
+        offset_l2 = ((expec_f_gt[correct_mask] - expec_f[correct_mask]) ** 2).sum(-1)              #both expec_f_gt and expec_f are distance from the nearest neighbor (distance means (distance x, distance y)+(predicted x, predicted y)=(nearest neighbor x, nearest neighbor y)), distance is in the form of (x,y))
         return offset_l2.mean()
 
     def _compute_fine_loss_l2_std(self, expec_f, expec_f_gt):

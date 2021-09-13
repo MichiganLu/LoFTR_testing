@@ -24,9 +24,9 @@ class FineMatching(nn.Module):
                 'mkpts0_f' (torch.Tensor): [M, 2],
                 'mkpts1_f' (torch.Tensor): [M, 2]}
         """
-        M, WW, C = feat_f0.shape
+        M, WW, C = feat_f0.shape                                           #think of it as batch number, length(from flatten w*w window), channel
         W = int(math.sqrt(WW))
-        scale = data['hw0_i'][0] / data['hw0_f'][0]
+        scale = data['hw0_i'][0] / data['hw0_f'][0]                        #height of first img divided by height of the second img
         self.M, self.W, self.WW, self.C, self.scale = M, W, WW, C, scale
 
         # corner case: if no coarse matches found
@@ -40,21 +40,21 @@ class FineMatching(nn.Module):
             })
             return
 
-        feat_f0_picked = feat_f0_picked = feat_f0[:, WW//2, :]
-        sim_matrix = torch.einsum('mc,mrc->mr', feat_f0_picked, feat_f1)
+        feat_f0_picked = feat_f0_picked = feat_f0[:, WW//2, :]                       #picking the center vector
+        sim_matrix = torch.einsum('mc,mrc->mr', feat_f0_picked, feat_f1)             #picked vector dot product with processed feature map 1
         softmax_temp = 1. / C**.5
-        heatmap = torch.softmax(softmax_temp * sim_matrix, dim=1).view(-1, W, W)
+        heatmap = torch.softmax(softmax_temp * sim_matrix, dim=1).view(-1, W, W)     #softmax should be dimension 1 because dimension 0 is batch dimension, dimension 1 is length dimension, reshape back to w*w
 
         # compute coordinates from heatmap
-        coords_normalized = dsnt.spatial_expectation2d(heatmap[None], True)[0]  # [M, 2]
+        coords_normalized = dsnt.spatial_expectation2d(heatmap[None], True)[0]  # [M, 2]      #find sub_pixel matches from spatial_expectation2d, this coordinate is normalized, meaning that both x and y are from -1 to 1
         grid_normalized = create_meshgrid(W, W, True, heatmap.device).reshape(1, -1, 2)  # [1, WW, 2]
 
         # compute std over <x, y>
-        var = torch.sum(grid_normalized**2 * heatmap.view(-1, WW, 1), dim=1) - coords_normalized**2  # [M, 2]
-        std = torch.sum(torch.sqrt(torch.clamp(var, min=1e-10)), -1)  # [M]  clamp needed for numerical stability
+        var = torch.sum(grid_normalized**2 * heatmap.view(-1, WW, 1), dim=1) - coords_normalized**2  # [M, 2], torch.sum(grid_normalized**2 * heatmap.view(-1, WW, 1), dim=1) is of dim[M,2], coords_normalized**2 is of dim [M, 2], final result of dim [M,2]
+        std = torch.sum(torch.sqrt(torch.clamp(var, min=1e-10)), -1)  # [M]  clamp needed for numerical stability. Basically sum x stdev with y stdev
         
         # for fine-level supervision
-        data.update({'expec_f': torch.cat([coords_normalized, std.unsqueeze(1)], -1)})
+        data.update({'expec_f': torch.cat([coords_normalized, std.unsqueeze(1)], -1)})   #expec_f is of dim [batch_num, 3], where 3 stands for (x_normalized, y_normalized, std)
 
         # compute absolute kpt coords
         self.get_fine_match(coords_normalized, data)
@@ -64,9 +64,9 @@ class FineMatching(nn.Module):
         W, WW, C, scale = self.W, self.WW, self.C, self.scale
 
         # mkpts0_f and mkpts1_f
-        mkpts0_f = data['mkpts0_c']
+        mkpts0_f = data['mkpts0_c']                                                               #remember although this matches were fround from coarse feat map, they are scaled back to original image
         scale1 = scale * data['scale1'][data['b_ids']] if 'scale0' in data else scale
-        mkpts1_f = data['mkpts1_c'] + (coords_normed * (W // 2) * scale1)[:len(data['mconf'])]
+        mkpts1_f = data['mkpts1_c'] + (coords_normed * (W // 2) * scale1)[:len(data['mconf'])]    #(W // 2) is the radius, so this is coords_normed*radius*scale, which gives the distance from the match to the nearest neighbor
 
         data.update({
             "mkpts0_f": mkpts0_f,
