@@ -9,6 +9,7 @@ import pandas as pd
 from scipy.spatial.transform import Rotation as R
 import glob
 from src.loftr import LoFTR, default_cfg
+from collections import OrderedDict
 
 mint = np.array([[458.654,0,367.215],[0,457.296,248.375],[0,0,1]]) #remember to change it for different cam
 
@@ -127,19 +128,35 @@ def main(args):
     if args.gtcsv != '':
         gt_dataframe = pd.read_csv(args.gtcsv, usecols=[i for i in range(1, 8)], nrows=750)
 
-    for i in range(0, len(imgs)-5, 5):
+    feature_dict = OrderedDict()          #this is to save extracted feature map temporarily
+    frame_interval = args.frame_interval
+    for i in range(0, len(imgs)-frame_interval, frame_interval):
         # time the detection
         img0_raw = cv2.imread(imgs[i], cv2.IMREAD_GRAYSCALE)
-        img1_raw = cv2.imread(imgs[i+5], cv2.IMREAD_GRAYSCALE)
+        img1_raw = cv2.imread(imgs[i+frame_interval], cv2.IMREAD_GRAYSCALE)
         img0_raw = cv2.resize(img0_raw, (640, 480))
         img1_raw = cv2.resize(img1_raw, (640, 480))
         img0 = torch.from_numpy(img0_raw)[None][None].cuda() / 255.
         img1 = torch.from_numpy(img1_raw)[None][None].cuda() / 255.
-        batch = {'image0': img0, 'image1': img1}
 
         start = timeit.default_timer()
         with torch.no_grad():
-            matcher(batch)
+            if i in feature_dict:                                         #the first image already been input into LoFTR before
+                flag = True
+                batch = {'image0': img0, 'image1': img1}
+                feat1_c, feat1_f = matcher.extract_feature(batch, flag)   #only extract feature map for the second image
+                feature_dict[i+frame_interval] = [feat1_c, feat1_f]       #store feature map to dictionary
+                feat0_c, feat0_f = feature_dict.pop(i)                    #get the feature map for the first image from dictionary
+            else:                                                         #none of the images been input before
+                flag = False
+                batch = {'image0': img0, 'image1': img1}
+                feat0_c, feat1_c, feat0_f, feat1_f = matcher.extract_feature(batch, flag)   #extract feature map for both images
+                feature_dict[i] = [feat0_c, feat0_f]                                        #store feature map to dictionary
+                feature_dict[i+frame_interval] = [feat1_c, feat1_f]
+
+            if len(feature_dict) > 10:
+                feature_dict.popitem(last=False)          #preventing dictionary from building up
+            matcher.transformer(feat0_c, feat1_c, feat0_f, feat1_f, batch)
             mkpts0 = batch['mkpts0_f'].cpu().numpy()
             mkpts1 = batch['mkpts1_f'].cpu().numpy()
             #mconf = batch['mconf'].cpu().numpy()
@@ -153,12 +170,12 @@ def main(args):
         # get ground truth
         if args.gtcsv != '':
             t1 = gt_dataframe.iloc[i, 0:3].to_numpy()
-            t2 = gt_dataframe.iloc[i + 5, 0:3].to_numpy()
+            t2 = gt_dataframe.iloc[i + frame_interval, 0:3].to_numpy()
             gt_t = t2 - t1
             quaternion1 = gt_dataframe.iloc[i, 3:8].to_numpy()
             quaternion1_scaler_last = np.array([quaternion1[1], quaternion1[2], quaternion1[3], quaternion1[0]])
             rotation1 = R.from_quat(quaternion1_scaler_last).as_matrix()
-            quaternion2 = gt_dataframe.iloc[i + 5, 3:8].to_numpy()
+            quaternion2 = gt_dataframe.iloc[i + frame_interval, 3:8].to_numpy()
             quaternion2_scaler_last = np.array([quaternion2[1], quaternion2[2], quaternion2[3], quaternion2[0]])
             rotation2 = R.from_quat(quaternion2_scaler_last).as_matrix()
             gt_rotation = rotation1 @ rotation2.T
@@ -213,7 +230,7 @@ def main(args):
         (hB, wB) = img1_raw.shape[:2]
         vis = np.zeros((max(hA, hB), wA + wB, 3), dtype="uint8")
         vis[0:hA, 0:wA] = cv2.resize(cv2.imread(imgs[i]), (640,480))
-        vis[0:hB, wA:] = cv2.resize(cv2.imread(imgs[i+5]),(640,480))
+        vis[0:hB, wA:] = cv2.resize(cv2.imread(imgs[i+frame_interval]),(640,480))
 
         # loop over the matches
         for p1, p2 in zip(finalkp1, finalkp2):
@@ -223,14 +240,14 @@ def main(args):
             cv2.line(vis, ptA, ptB, (0, 255, 0), 1)
             cv2.circle(vis, ptA, 3, color=(0, 0, 255))
             cv2.circle(vis, ptB, 3, color=(0, 0, 255))
-        cv2.imwrite('./output/' + 'match' + str(i) + '.jpg', vis)
+        cv2.imwrite('./output/separate/' + 'match' + str(i) + '.jpg', vis)
         print('outputting matching' + str(i))
         temp_str = 'match' + str(i)
         dict1['match_id'].append(temp_str)
         # save csv to dict
     if args.gtcsv != '':
         df1 = pd.DataFrame.from_dict(dict1)
-        df1.to_csv('./output/evaluation.csv')
+        df1.to_csv('./output/separate/evaluation.csv')
 
 
 if __name__ == '__main__':
@@ -241,6 +258,7 @@ if __name__ == '__main__':
     parser.add_argument("--gtcsv", type=str, default='', help='path to ground truth csv file')
     parser.add_argument("--images", type=str, required=True, help='image directory')
     parser.add_argument("--match_threshold", type=float, default = 0.2, help='coarse match threshold')
+    parser.add_argument("--frame_interval", type=int, default = 5, help='frames to skip between matches')
     args = parser.parse_args()
 
     main(args)
