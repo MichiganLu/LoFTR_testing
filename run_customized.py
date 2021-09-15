@@ -160,9 +160,10 @@ def main(args):
             mkpts0 = batch['mkpts0_f'].cpu().numpy()
             mkpts1 = batch['mkpts1_f'].cpu().numpy()
             #mconf = batch['mconf'].cpu().numpy()
-            skip = max(1,int(len(mkpts0)/1000))  #if too many matches, you want to skip some
-            mkpts0 = mkpts0[::skip]
-            mkpts1 = mkpts1[::skip]
+            if len(mkpts0)>1000:
+                skip = max(1,int(len(mkpts0)/1000))  #if too many matches, you want to skip some
+                mkpts0 = mkpts0[::skip]
+                mkpts1 = mkpts1[::skip]
         stop = timeit.default_timer()
         dict1['detection_time_LoFTR'].append(stop - start)
         assert len(mkpts0) == len(mkpts1), f'mkpts0: {len(mkpts0)} v.s. mkpts1: {len(mkpts1)}'

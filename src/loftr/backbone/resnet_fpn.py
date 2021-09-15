@@ -50,8 +50,8 @@ class ResNetFPN_8_2(nn.Module):
         super().__init__()
         # Config
         block = BasicBlock
-        initial_dim = config['initial_dim']
-        block_dims = config['block_dims']
+        initial_dim = config['initial_dim']   #128
+        block_dims = config['block_dims']     #[128,196,256]
 
         # Class Variable
         self.in_planes = initial_dim
@@ -61,21 +61,21 @@ class ResNetFPN_8_2(nn.Module):
         self.bn1 = nn.BatchNorm2d(initial_dim)
         self.relu = nn.ReLU(inplace=True)
 
-        self.layer1 = self._make_layer(block, block_dims[0], stride=1)  # 1/2
-        self.layer2 = self._make_layer(block, block_dims[1], stride=2)  # 1/4
-        self.layer3 = self._make_layer(block, block_dims[2], stride=2)  # 1/8
+        self.layer1 = self._make_layer(block, block_dims[0], stride=1)  # 1/2   #128 to 128
+        self.layer2 = self._make_layer(block, block_dims[1], stride=2)  # 1/4   #128 to 196
+        self.layer3 = self._make_layer(block, block_dims[2], stride=2)  # 1/8   #196 to 256
 
         # 3. FPN upsample
-        self.layer3_outconv = conv1x1(block_dims[2], block_dims[2])
-        self.layer2_outconv = conv1x1(block_dims[1], block_dims[2])
-        self.layer2_outconv2 = nn.Sequential(
+        self.layer3_outconv = conv1x1(block_dims[2], block_dims[2])    #256 to 256
+        self.layer2_outconv = conv1x1(block_dims[1], block_dims[2])    #196 to 256
+        self.layer2_outconv2 = nn.Sequential(                          #256 to 196
             conv3x3(block_dims[2], block_dims[2]),
             nn.BatchNorm2d(block_dims[2]),
             nn.LeakyReLU(),
             conv3x3(block_dims[2], block_dims[1]),
         )
-        self.layer1_outconv = conv1x1(block_dims[0], block_dims[1])
-        self.layer1_outconv2 = nn.Sequential(
+        self.layer1_outconv = conv1x1(block_dims[0], block_dims[1])   #128 to 196
+        self.layer1_outconv2 = nn.Sequential(                         #196 to 128
             conv3x3(block_dims[1], block_dims[1]),
             nn.BatchNorm2d(block_dims[1]),
             nn.LeakyReLU(),
@@ -94,7 +94,7 @@ class ResNetFPN_8_2(nn.Module):
         layer2 = block(dim, dim, stride=1)
         layers = (layer1, layer2)
 
-        self.in_planes = dim
+        self.in_planes = dim      #it is the previous dimension, that is why it updates after finish making layer
         return nn.Sequential(*layers)
 
     def forward(self, x):
@@ -105,15 +105,15 @@ class ResNetFPN_8_2(nn.Module):
         x3 = self.layer3(x2)  # 1/8
 
         # FPN
-        x3_out = self.layer3_outconv(x3)
+        x3_out = self.layer3_outconv(x3)     #1*1 conv2d, 256 to 256
 
-        x3_out_2x = F.interpolate(x3_out, scale_factor=2., mode='bilinear', align_corners=True)
-        x2_out = self.layer2_outconv(x2)
-        x2_out = self.layer2_outconv2(x2_out+x3_out_2x)
+        x3_out_2x = F.interpolate(x3_out, scale_factor=2., mode='bilinear', align_corners=True)   #feature map size*2
+        x2_out = self.layer2_outconv(x2)     #1*1 conv2d, 196 to 256
+        x2_out = self.layer2_outconv2(x2_out+x3_out_2x)   #(x2_out+x3_out_2x) both of 256 channel, then convert to 196 channel
 
-        x2_out_2x = F.interpolate(x2_out, scale_factor=2., mode='bilinear', align_corners=True)
-        x1_out = self.layer1_outconv(x1)
-        x1_out = self.layer1_outconv2(x1_out+x2_out_2x)
+        x2_out_2x = F.interpolate(x2_out, scale_factor=2., mode='bilinear', align_corners=True)   #feature map size*2, 196 channel
+        x1_out = self.layer1_outconv(x1)    #1*1 conv2d, 128 to 196
+        x1_out = self.layer1_outconv2(x1_out+x2_out_2x)   #(x1_out+x2_out_2x) both of 196 channel, then convert to 128 channel
 
         return [x3_out, x1_out]
 
