@@ -49,7 +49,7 @@ If you want to run LoFTR-OT, some extra steps are needed:
 
 ## Run LoFTR demos
 
-###Run on EuRoc
+### Run on EuRoc
 
 Firstly you need to download the weights from [here](https://drive.google.com/drive/folders/1DOcOPZb3-5cWxLqn256AhwUVjBPifhuf?usp=sharing) and place the weights in such directory arrangement: LoFTR/weights.
 Secondly create an output folder under the LoFTR root directory. Then you can run the following command:
