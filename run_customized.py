@@ -8,7 +8,7 @@ import timeit
 import pandas as pd
 from scipy.spatial.transform import Rotation as R
 import glob
-from src.loftr import LoFTR, default_cfg
+from src.loftr import LoFTR, default_cfg, Pruned_Backbone
 from collections import OrderedDict
 
 mint = np.array([[458.654,0,367.215],[0,457.296,248.375],[0,0,1]]) #remember to change it for different cam
@@ -109,6 +109,8 @@ def main(args):
     else:
         raise NotImplementedError("model can only be either indoor or outdoor")
     matcher.load_state_dict(torch.load(model_path)['state_dict'])
+    new_backbone = Pruned_Backbone()
+    matcher.backbone = new_backbone
     matcher = matcher.eval().cuda()
 
     #check if image path exist
@@ -156,6 +158,7 @@ def main(args):
 
             if len(feature_dict) > 10:
                 feature_dict.popitem(last=False)          #preventing dictionary from building up
+                feature_dict.popitem(last=False)
             matcher.transformer(feat0_c, feat1_c, feat0_f, feat1_f, batch)
             mkpts0 = batch['mkpts0_f'].cpu().numpy()
             mkpts1 = batch['mkpts1_f'].cpu().numpy()
@@ -241,14 +244,14 @@ def main(args):
             cv2.line(vis, ptA, ptB, (0, 255, 0), 1)
             cv2.circle(vis, ptA, 3, color=(0, 0, 255))
             cv2.circle(vis, ptB, 3, color=(0, 0, 255))
-        cv2.imwrite('./output/separate/' + 'match' + str(i) + '.jpg', vis)
+        cv2.imwrite('./output/pruned/' + 'match' + str(i) + '.jpg', vis)
         print('outputting matching' + str(i))
         temp_str = 'match' + str(i)
         dict1['match_id'].append(temp_str)
         # save csv to dict
     if args.gtcsv != '':
         df1 = pd.DataFrame.from_dict(dict1)
-        df1.to_csv('./output/separate/evaluation.csv')
+        df1.to_csv('./output/pruned/seventh_prune2.csv')
 
 
 if __name__ == '__main__':
