@@ -251,7 +251,7 @@ def main(args):
         # save csv to dict
     if args.gtcsv != '':
         df1 = pd.DataFrame.from_dict(dict1)
-        df1.to_csv('./output/pruned/seventh_prune2.csv')
+        df1.to_csv('./output/pruned/random.csv')
 
 
 if __name__ == '__main__':
