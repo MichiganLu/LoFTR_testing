@@ -58,6 +58,15 @@ python run_customized.py --model indoor --images /home/your_EuRoc_imageset_direc
 ```
 For the images directory, do not forget to add the forward slash at the end of the directory. The model argument can either be
 indoor or outdoor. The output matching images and evaluation.csv can be found at the output directory upon completion of execution.
+
+### Run on HPatches
+After you download the weight and place it in such arrangement: LoFTR/weights, run the following command:
+```
+python run_hpatches.py --images /home/path_to_hpatches/hpatches-sequences-release/ --match_threshold 0.2
+```
+Output images and evaluation will be placed in output/hpatches folder.
+
+
 ### Match image pairs with LoFTR
 
 <details>

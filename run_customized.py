@@ -109,8 +109,8 @@ def main(args):
     else:
         raise NotImplementedError("model can only be either indoor or outdoor")
     matcher.load_state_dict(torch.load(model_path)['state_dict'])
-    new_backbone = Pruned_Backbone()
-    matcher.backbone = new_backbone
+    #new_backbone = Pruned_Backbone()
+    #matcher.backbone = new_backbone
     matcher = matcher.eval().cuda()
 
     #check if image path exist
@@ -244,14 +244,14 @@ def main(args):
             cv2.line(vis, ptA, ptB, (0, 255, 0), 1)
             cv2.circle(vis, ptA, 3, color=(0, 0, 255))
             cv2.circle(vis, ptB, 3, color=(0, 0, 255))
-        cv2.imwrite('./output/pruned/' + 'match' + str(i) + '.jpg', vis)
+        cv2.imwrite('./output/' + 'match' + str(i) + '.jpg', vis)
         print('outputting matching' + str(i))
         temp_str = 'match' + str(i)
         dict1['match_id'].append(temp_str)
         # save csv to dict
     if args.gtcsv != '':
         df1 = pd.DataFrame.from_dict(dict1)
-        df1.to_csv('./output/pruned/random.csv')
+        df1.to_csv('./output/eval.csv')
 
 
 if __name__ == '__main__':
