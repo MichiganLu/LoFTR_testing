@@ -135,20 +135,21 @@ def main(args):
                     mkpts0 = batch_outdoor['mkpts0_f'].cpu().numpy()
                     mkpts1 = batch_outdoor['mkpts1_f'].cpu().numpy()
                     dict1['model'].append('outdoor')
+            #get GT homography
+            with open(text[i], 'r') as f:
+                H = f.read()
+                H = H.replace('\n', ';', 2)
+                H = np.matrix(H)  # this is the ground truth homography matrix
+            # since you have reshape the image, you need to transform the homography
+            S_A, S_B = np.eye(3), np.eye(3)
+            S_A[0][0] = scale_x_A
+            S_A[1][1] = scale_y_A
+            S_B[0][0] = scale_x_B
+            S_B[1][1] = scale_y_B
+            H_scaled = S_B @ H @ np.linalg.inv(S_A)
             if len(mkpts0) != 0:
                 dict1['total_match_loftr'].append(len(mkpts0))
                 #doing evaluation
-                with open(text[i],'r') as f:
-                    H = f.read()
-                    H = H.replace('\n',';',2)
-                    H = np.matrix(H)           #this is the ground truth homography matrix
-                #since you have reshape the image, you need to transform the homography
-                S_A, S_B = np.eye(3), np.eye(3)
-                S_A[0][0] = scale_x_A
-                S_A[1][1] = scale_y_A
-                S_B[0][0] = scale_x_B
-                S_B[1][1] = scale_y_B
-                H_scaled = S_B @ H @ np.linalg.inv(S_A)
                 mask_loftr, total_distance_loftr, valid_distance_loftr = check_validity(mkpts0,mkpts1,H_scaled)
                 dict1['valid_match_loftr'].append(np.sum(mask_loftr))
                 dict1['avg_distance_loftr'].append(total_distance_loftr)
